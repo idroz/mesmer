@@ -369,7 +369,7 @@ func RunMezmer() error {
 	// Run the Ebiten visualizer
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetWindowSize(initialWidth, initialHeight)
-	ebiten.SetWindowTitle("Visualizer")
+	ebiten.SetWindowTitle("Mezmer")
 	if err := ebiten.RunGame(visualizer); err != nil {
 		log.Fatalf("Failed to run visualizer: %v", err)
 	}
