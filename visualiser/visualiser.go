@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"runtime"
+	"time"
 
 	"github.com/gen2brain/malgo"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -261,108 +262,116 @@ func (v *audioVisualizer) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return outsideWidth, outsideHeight
 }
 
-func RunMezmer() error {
-	runtime.LockOSThread()
-
-	// Initialize MiniAudio context
-	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
-		fmt.Printf("MiniAudio Log: %s\n", message)
-	})
-	if err != nil {
-		return fmt.Errorf("Failed to initialize MiniAudio: %s", err.Error())
-	}
-	defer ctx.Uninit()
-	defer ctx.Free()
-
-	// List available capture devices
-	captureDevices, err := ctx.Devices(malgo.Capture)
-	if err != nil {
-		return fmt.Errorf("Failed to list capture devices: %s", err.Error())
-	}
-
-	fmt.Println("Capture Devices:")
-	var targetDevice *malgo.DeviceInfo
-	for _, device := range captureDevices {
-		fmt.Printf("  %s\n", device.Name())
-		if device.Name() == "OP-XY" {
-			targetDevice = &device
-			break
-		}
-	}
-
-	if targetDevice == nil {
-		return fmt.Errorf("Capture device 'OP-XY' not found.")
-	}
-
-	// Prepare buffer for audio input
-	audioInput := make([]float64, chunkSize)
-
-	// Configure audio capture
-	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
-	deviceConfig.Capture.Format = malgo.FormatS16
-	deviceConfig.Playback.Channels = 2
-	deviceConfig.SampleRate = 44100
-	deviceConfig.Alsa.NoMMap = 1
-	deviceConfig.Capture.DeviceID = targetDevice.ID.Pointer()
-
-	// Configure callbacks for capturing audio
-	deviceCallbacks := malgo.DeviceCallbacks{
-		Data: func(_, inputSamples []byte, frameCount uint32) {
-			for i := 0; i < int(frameCount) && i < len(audioInput); i++ {
-				sample := int16(inputSamples[2*i]) | int16(inputSamples[2*i+1])<<8
-				audioInput[i] = float64(sample) / 32768.0 // Convert to float64
-			}
-		},
-	}
-
-	// Initialize audio device
-	device, err := malgo.InitDevice(ctx.Context, deviceConfig, deviceCallbacks)
-	if err != nil {
-		return fmt.Errorf("Failed to initialize audio device: %v", err)
-	}
-	defer device.Uninit()
-
-	// Start audio capture
-	if err := device.Start(); err != nil {
-		return fmt.Errorf("Failed to start audio device: %v", err)
-	}
-
-	// Initialize the visualizer
+func RunVisualizer(ctx *malgo.AllocatedContext, audioInput []float64) {
 	initialWidth, initialHeight := 800, 400
 	visualizer := newAudioVisualizer(chunkSize, initialWidth, initialHeight)
 
-	visualizer.connectedDevice = targetDevice.Name()
-	go func() {
-		for {
-			if visualizer.volume <= 600 {
-				visualizer.waveForm = "smooth"
-			} else if visualizer.volume > 600 {
-				visualizer.waveForm = "smooth"
-			}
-		}
-	}()
+	// Run the Ebiten game loop
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	ebiten.SetWindowSize(initialWidth, initialHeight)
+	ebiten.SetWindowTitle("Visualizer")
 
-	// Capture audio data in a separate goroutine
 	go func() {
 		for {
 			copy(visualizer.currentChunk, audioInput)
 		}
 	}()
 
-	// Run the Ebiten game loop
-	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
-	ebiten.SetWindowSize(initialWidth, initialHeight)
-	ebiten.SetWindowTitle("Mezmer")
 	if err := ebiten.RunGame(visualizer); err != nil {
-		return fmt.Errorf("Failed to run visualizer: %v", err)
+		log.Fatalf("Failed to run visualizer: %v", err)
 	}
-
-	return nil
 }
 
-func StartMezmer() {
-	err := RunMezmer()
+func RunMezmer() error {
+	runtime.LockOSThread()
+
+	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
+		fmt.Printf("Log: %s\n", message)
+	})
 	if err != nil {
-		log.Println(err.Error())
+		log.Fatalf("Failed to initialize context: %v", err)
 	}
+	defer ctx.Uninit()
+	defer ctx.Free()
+
+	audioInput := make([]float64, chunkSize)
+	var deviceAvailable bool
+	var targetDevice *malgo.DeviceInfo
+
+	// Initialize the visualizer
+	initialWidth, initialHeight := 800, 400
+	visualizer := newAudioVisualizer(chunkSize, initialWidth, initialHeight)
+
+	// Goroutine to check for the OP-XY device
+	go func() {
+		for {
+			devices, err := ctx.Devices(malgo.Capture)
+			if err != nil {
+				log.Printf("Error listing devices: %v", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			for _, device := range devices {
+				if device.Name() == "OP-XY" {
+					targetDevice = &device
+					deviceAvailable = true
+					fmt.Printf("Found device: %s\n", device.Name())
+					visualizer.connectedDevice = device.Name()
+					return
+				}
+			}
+
+			fmt.Println("Waiting for OP-XY device...")
+			time.Sleep(1 * time.Second)
+		}
+	}()
+
+	go func() {
+		for {
+			if deviceAvailable && targetDevice != nil {
+				// Configure audio capture
+				deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
+				deviceConfig.Capture.Format = malgo.FormatS16
+				deviceConfig.Capture.Channels = 1
+				deviceConfig.SampleRate = 44100
+				deviceConfig.Capture.DeviceID = targetDevice.ID.Pointer()
+
+				deviceCallbacks := malgo.DeviceCallbacks{
+					Data: func(_, inputSamples []byte, frameCount uint32) {
+						for i := 0; i < int(frameCount) && i < len(audioInput); i++ {
+							sample := int16(inputSamples[2*i]) | int16(inputSamples[2*i+1])<<8
+							audioInput[i] = float64(sample) / 32768.0 // Convert to float64
+						}
+					},
+				}
+
+				device, err := malgo.InitDevice(ctx.Context, deviceConfig, deviceCallbacks)
+				if err != nil {
+					log.Fatalf("Failed to initialize device: %v", err)
+				}
+				defer device.Uninit()
+
+				if err := device.Start(); err != nil {
+					log.Fatalf("Failed to start device: %v", err)
+				}
+
+				// Copy audio data to visualizer
+				for {
+					copy(visualizer.currentChunk, audioInput)
+				}
+			} else {
+				time.Sleep(100 * time.Millisecond) // Wait for device to be available
+			}
+		}
+	}()
+
+	// Run the Ebiten visualizer
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	ebiten.SetWindowSize(initialWidth, initialHeight)
+	ebiten.SetWindowTitle("Visualizer")
+	if err := ebiten.RunGame(visualizer); err != nil {
+		log.Fatalf("Failed to run visualizer: %v", err)
+	}
+	return nil
 }
