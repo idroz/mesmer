@@ -8,7 +8,7 @@ Mezmer is real-time audio visualization application designed to bring your OP so
 
 ## Screenshots
 ![Image](/assets/images/sn1.png)
-![Image](/assets/images/sn.png)
+![Image](/assets/images/sn2.png)
 
 
 ## Demos
