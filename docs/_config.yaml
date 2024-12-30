@@ -3,3 +3,5 @@ description: A home for OP-XY visualisations
 show_downloads: true
 google_analytics:
 theme: jekyll-theme-cayman
+github:
+  app_url: 

@@ -1,24 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-    <key>CFBundleName</key>
-    <string>Mezmer</string>
-    <key>CFBundleDisplayName</key>
-    <string>Mezmer</string>
-    <key>CFBundleExecutable</key>
-    <string>Mezmer</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.example.visualizer</string>
-    <key>CFBundleVersion</key>
-    <string>1.0</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>10.13</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>This app requires access to the microphone to visualize audio.</string>
-</dict>
+    <dict>
+        <key>CFBundleName</key>
+        <string>Mezmer</string>
+        <key>CFBundleDisplayName</key>
+        <string>Mezmer</string>
+        <key>CFBundleExecutable</key>
+        <string>Mezmer</string>
+        <key>CFBundleIdentifier</key>
+        <string>com.example.visualizer</string>
+        <key>CFBundleVersion</key>
+        <string>0.01b</string>
+        <key>CFBundlePackageType</key>
+        <string>APPL</string>
+        <key>LSMinimumSystemVersion</key>
+        <string>10.13</string>
+        <key>CFBundleIconFile</key>
+        <string>AppIcon</string>
+        <key>NSMicrophoneUsageDescription</key>
+        <string>This app requires access to the microphone to visualize audio.</string>
+        <key>NSHumanReadableCopyright</key>
+        <string>Copyright © 2024-2025 IAD</string>
+    </dict>
 </plist>

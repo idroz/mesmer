@@ -5,8 +5,10 @@ mkdir -p bin/Mezmer.app/Contents/MacOS
 mkdir -p bin/Mezmer.app/Contents/Resources
 
 mv mezmer bin/Mezmer.app/Contents/MacOS/Mezmer
+cp resources/LICENSE.txt bin/Mezmer.app/Contents/Resources
 cp resources/Mezmer.icns bin/Mezmer.app/Contents/Resources/AppIcon.icns
 cp resources/Info.plist bin/Mezmer.app/Contents
+rm *.dmg
 
 APP_NAME="Mezmer"
 DMG_FILE_NAME="${APP_NAME}.dmg"
