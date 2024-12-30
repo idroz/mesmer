@@ -65,7 +65,7 @@ func newAudioVisualizer(chunkSize, screenWidth, screenHeight int) *audioVisualiz
 		maxPoints:       1000, // Initial maximum points
 		screenWidth:     screenWidth,
 		screenHeight:    screenHeight,
-		showText:        false,
+		showText:        true,
 		volume:          0,
 		frequency:       0,
 		spacePressed:    false,
