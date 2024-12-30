@@ -4,4 +4,4 @@ show_downloads: true
 google_analytics:
 theme: jekyll-theme-cayman
 github:
-  app_url: 
+  app_url: https://github.com/idroz/mezmer/releases/download/latest/Mezmer.dmg
