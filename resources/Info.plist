@@ -7,9 +7,9 @@
         <key>CFBundleDisplayName</key>
         <string>Mezmer</string>
         <key>CFBundleExecutable</key>
-        <string>Mezmer</string>
+        <string>mezmer</string>
         <key>CFBundleIdentifier</key>
-        <string>com.example.visualizer</string>
+        <string>com.beringresearch.Mezmer</string>
         <key>CFBundleVersion</key>
         <string>0.01b</string>
         <key>CFBundlePackageType</key>
