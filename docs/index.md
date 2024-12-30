@@ -1,5 +1,7 @@
 # Mezmer
 
+If you enjoy using Mezmer, consider [buying me a coffee](https://ko-fi.com/iad_draws) - it's greatly appreciated!
+
 **Immersive Real-Time OP-XY Audio Visualization**
 
 Mezmer is real-time audio visualization application designed to bring your OP sound experiences to life. It captures audio input from a connected device and translates it into dynamic visual patterns, making it perfect for music enthusiasts, DJs, and sound designers.
