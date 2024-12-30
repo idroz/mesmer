@@ -116,13 +116,21 @@ func (v *audioVisualizer) Update() error {
 		v.maxPoints = 0
 	}
 
+	randX := float64(v.screenWidth / 2)
+	randY := float64(v.screenHeight / 2)
+
+	if v.volume >= 4 {
+		randX = rand.Float64() * float64(v.screenWidth)
+		randY = rand.Float64() * float64(v.screenHeight)
+	}
+
 	// Add new points radiating from the center of the screen based on the volume
 	for len(v.volumePoints) < v.maxPoints {
 		angle := rand.Float64() * 2 * math.Pi // Random angle
 		speed := normalizedVolume + rand.Float64()*radiateVariance
 		v.volumePoints = append(v.volumePoints, point{
-			x:         float64(v.screenWidth / 2),
-			y:         float64(v.screenHeight / 2),
+			x:         randX,
+			y:         randY,
 			xVelocity: math.Cos(angle) * speed,
 			yVelocity: math.Sin(angle) * speed,
 			alpha:     0.0, // Start with alpha 0 for fade-in effect
