@@ -213,7 +213,7 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 			for i := 0; i < len(vertices)-1; i++ {
 				x1, y1 := vertices[i].DstX, vertices[i].DstY
 				x2, y2 := vertices[i+1].DstX, vertices[i+1].DstY
-				vector.StrokeLine(screen, x1, y1, x2, y2, 2, clr, false)
+				vector.StrokeLine(screen, x1, y1, x2, y2, 3, clr, false)
 			}
 		}
 	}

@@ -14,13 +14,15 @@ const (
 )
 
 func SmoothWaveform(samples []float64, screenWidth, screenHeight int, offset float64) []ebiten.Vertex {
-	vertices := make([]ebiten.Vertex, 0, len(samples)*2)
+	vertices := make([]ebiten.Vertex, 0, len(samples))
 	centerY := float64(screenHeight) / 2
-	stepX := float64(screenWidth) / float64(len(samples))
+	//stepX := float64(screenWidth) / float64(len(samples)+1)
+	stepX := float64(screenWidth) / 128
+	scaleY := float64(screenHeight) / 2
 
 	for i, sample := range samples {
 		x := float32(float64(i) * stepX)
-		y := float32(centerY + math.Sin(float64(i)/float64(len(samples))*2*math.Pi)*sample*centerY/2)
+		y := float32(centerY + sample*scaleY)
 		vertices = append(vertices, ebiten.Vertex{
 			DstX: x, DstY: y,
 			ColorR: 1, ColorG: 1, ColorB: 1, ColorA: 0.1,
