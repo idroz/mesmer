@@ -4,16 +4,25 @@ mkdir bin
 mkdir -p bin/Mezmer.app/Contents/MacOS
 mkdir -p bin/Mezmer.app/Contents/Resources
 
+codesign --deep --force --options=runtime --entitlements ./resources/entitlements.plist --sign "Developer ID Application: Ignat Drozdov (27B2YLEUVR)" --timestamp ./mezmer
+
+
 mv mezmer bin/Mezmer.app/Contents/MacOS/Mezmer
 cp resources/LICENSE.txt bin/Mezmer.app/Contents/Resources
 cp resources/Mezmer.icns bin/Mezmer.app/Contents/Resources/AppIcon.icns
 cp resources/Info.plist bin/Mezmer.app/Contents
+cp resources/entitlements.plist bin/Mezmer.app/Contents
 rm *.dmg
+
+zip -r Mezmer.zip bin/Mezmer.app
+xcrun notarytool submit Mezmer.zip --keychain-profile "notarytool-password" --wait
+
 
 APP_NAME="Mezmer"
 DMG_FILE_NAME="${APP_NAME}.dmg"
 VOLUME_NAME="${APP_NAME}"
 SOURCE_FOLDER_PATH="bin/"
+
 
 CREATE_DMG=create-dmg
 
