@@ -1,31 +1,42 @@
+rm -r bin
 GOOS=darwin GOARCH=arm64 go build -o bin/mezmer
 
-mkdir app
-mkdir -p app/Mezmer.app/Contents/MacOS
-mkdir -p app/Mezmer.app/Contents/Resources
+plutil -convert xml1 ./resources/entitlements.plist
+#codesign -vvv --deep --force --options=runtime --entitlements ./resources/entitlements.plist --sign "Developer ID Application: Ignat Drozdov (27B2YLEUVR)" --timestamp ./bin/mezmer
+#codesign -v -vvv --strict --deep bin/mezmer
 
-codesign -vvv --deep --force --options=runtime --entitlements ./resources/entitlements.plist --sign "Developer ID Application: Ignat Drozdov (27B2YLEUVR)" --timestamp ./bin/mezmer
-
-mv mezmer app/Mezmer.app/Contents/MacOS/mezmer
-cp resources/LICENSE.txt app/Mezmer.app/Contents/Resources
-cp resources/Mezmer.icns app/Mezmer.app/Contents/Resources/AppIcon.icns
-cp resources/Info.plist app/Mezmer.app/Contents
-cp resources/entitlements.plist app/Mezmer.app/Contents
-rm *.dmg
+go run macappgo/macapp.go \
+  -assets bin \
+  -bin  mezmer \
+  -icon resources/icon.png \
+  -identifier com.beringresearch.Mezmer \
+  -name "Mezmer" \
+  -o app
 
 APP_PATH="app/Mezmer.app"
+
+APP_CERTIFICATE="Developer ID Application: Ignat Drozdov (27B2YLEUVR)"
+codesign --timestamp --options=runtime -s "$APP_CERTIFICATE" -v --entitlements ./resources/entitlements.plist ./app/Mezmer.app
+
 ZIP_PATH="Mezmer.zip"
 
 # Create a ZIP archive suitable for notarization.
-/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+/usr/bin/ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+
 
 xcrun notarytool submit Mezmer.zip --keychain-profile "notarytool-password" --wait
 
+unzip Mezmer.zip
+rm Mezmer.zip
+xcrun stapler staple "Mezmer.app"
+
+mkdir dist
+mv Mezmer.app dist/
 
 APP_NAME="Mezmer"
 DMG_FILE_NAME="${APP_NAME}.dmg"
 VOLUME_NAME="${APP_NAME}"
-SOURCE_FOLDER_PATH="app/"
+SOURCE_FOLDER_PATH="dist/"
 
 
 CREATE_DMG=create-dmg
@@ -43,3 +54,4 @@ $CREATE_DMG \
   "${SOURCE_FOLDER_PATH}"
 
   rm -r app
+  rm *.zip
