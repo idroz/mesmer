@@ -50,7 +50,7 @@ type audioVisualizer struct {
 	showText        bool
 	volume          float64
 	frequency       float64
-	spacePressed    bool
+	tabPressed      bool
 	waveForm        string
 	waveOffset      float64
 	connectedDevice string
@@ -68,7 +68,7 @@ func newAudioVisualizer(chunkSize, screenWidth, screenHeight int) *audioVisualiz
 		showText:        true,
 		volume:          0,
 		frequency:       0,
-		spacePressed:    false,
+		tabPressed:      false,
 		waveForm:        "smooth",
 		waveOffset:      0,
 		connectedDevice: "",
@@ -77,14 +77,14 @@ func newAudioVisualizer(chunkSize, screenWidth, screenHeight int) *audioVisualiz
 
 // Update reads new audio data into the visualizer and updates the points.
 func (v *audioVisualizer) Update() error {
-	// Handle toggling text visibility on space key press
-	if ebiten.IsKeyPressed(ebiten.KeySpace) {
-		if !v.spacePressed {
+	// Handle toggling text visibility on tab key press
+	if ebiten.IsKeyPressed(ebiten.KeyTab) {
+		if !v.tabPressed {
 			v.showText = !v.showText
-			v.spacePressed = true
+			v.tabPressed = true
 		}
 	} else {
-		v.spacePressed = false
+		v.tabPressed = false
 	}
 
 	// Increment wave offset to control gradual oscillation
