@@ -54,6 +54,7 @@ type audioVisualizer struct {
 	frequency       float64
 	spacePressed    bool
 	waveForm        string
+	pointType       string
 	waveOffset      float64
 	connectedDevice string
 }
@@ -72,6 +73,7 @@ func newAudioVisualizer(chunkSize, screenWidth, screenHeight int) *audioVisualiz
 		frequency:       0,
 		spacePressed:    false,
 		waveForm:        "smooth",
+		pointType:       "radial",
 		waveOffset:      0,
 		connectedDevice: "No Device",
 	}
@@ -89,8 +91,19 @@ func (v *audioVisualizer) Update() error {
 		v.spacePressed = false
 	}
 
-	// Increment wave offset to control gradual oscillation
-	v.waveOffset += waveSpeed
+	if ebiten.IsKeyPressed(ebiten.KeyDigit0) {
+		v.waveForm = ""
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyDigit1) {
+		v.waveForm = "smooth"
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyDigit5) {
+		v.pointType = "radial"
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyDigit6) {
+		v.pointType = "spiral"
+	}
 
 	// Copy the latest audio data into the visualizer's current chunk.
 	copy(v.samples, v.currentChunk)
@@ -126,19 +139,44 @@ func (v *audioVisualizer) Update() error {
 		randY = rand.Float64() * float64(v.screenHeight)
 	}
 
-	// Add new points radiating from the center of the screen based on the volume
-	for len(v.volumePoints) < v.maxPoints {
-		angle := rand.Float64() * 2 * math.Pi // Random angle
-		speed := normalizedVolume + rand.Float64()*radiateVariance
-		v.volumePoints = append(v.volumePoints, point{
-			x:         randX,
-			y:         randY,
-			xVelocity: math.Cos(angle) * speed,
-			yVelocity: math.Sin(angle) * speed,
-			alpha:     0.0, // Start with alpha 0 for fade-in effect
-			volume:    normalizedVolume,
-			fadeIn:    true,
-		})
+	if v.pointType == "radial" {
+		// Add new points radiating from the center of the screen based on the volume
+		for len(v.volumePoints) < v.maxPoints {
+			angle := rand.Float64() * 2 * math.Pi // Random angle
+			speed := normalizedVolume + rand.Float64()*radiateVariance
+			v.volumePoints = append(v.volumePoints, point{
+				x:         randX,
+				y:         randY,
+				xVelocity: math.Cos(angle) * speed,
+				yVelocity: math.Sin(angle) * speed,
+				alpha:     0.0, // Start with alpha 0 for fade-in effect
+				volume:    normalizedVolume,
+				fadeIn:    true,
+			})
+		}
+	} else if v.pointType == "spiral" {
+		for len(v.volumePoints) < v.maxPoints {
+			// Spiral parameters
+			angle := float64(len(v.volumePoints)) * 2.2 // Increment angle for spiral
+			radius := 0.1 * angle                       // Archimedean spiral: radius increases linearly with angle
+
+			// Compute initial position and velocity for the Archimedean spiral
+			speed := normalizedVolume*5 + rand.Float64()*radiateVariance
+			xVelocity := math.Cos(angle) * speed
+			yVelocity := math.Sin(angle) * speed
+
+			// Generate the point with initial properties
+			v.volumePoints = append(v.volumePoints, point{
+				x:         randX + math.Cos(angle)*radius, // Start at spiral position
+				y:         randY + math.Sin(angle)*radius, // Start at spiral position
+				xVelocity: xVelocity,
+				yVelocity: yVelocity,
+				alpha:     0.0, // Start with alpha 0 for fade-in effect
+				volume:    normalizedVolume,
+				fadeIn:    true,
+			})
+		}
+
 	}
 
 	// Update existing points (radiate, fade in, fade out, and remove if off screen or alpha <= 0)
@@ -175,25 +213,19 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 	v.frequency = dominantFrequency
 	clr := color.RGBA{R: uint8(math.Min(0, 255-255*dominantFrequency/10)), G: 2, B: uint8(math.Min(255, 255*dominantFrequency/10)), A: uint8(255 * v.volume)}
 
-	if v.waveForm == "folding" {
-		vertices := waveforms.FoldingWaveform(v.samples, v.screenWidth, v.screenHeight, v.waveOffset, v.volume)
+	if v.waveForm == "smooth" {
+		vertices := waveforms.SmoothWaveform(v.samples, v.screenWidth, v.screenHeight, v.waveOffset)
 		if len(vertices) > 1 {
 			for i := 0; i < len(vertices)-1; i++ {
 				x1, y1 := vertices[i].DstX, vertices[i].DstY
 				x2, y2 := vertices[i+1].DstX, vertices[i+1].DstY
-				vector.StrokeLine(screen, x1, y1, x2, y2, 2, color.RGBA{R: 120, G: 200, B: 255, A: 255}, false)
+				vector.StrokeLine(screen, x1, y1, x2, y2, 3, clr, false)
 			}
-		}
-		// Connect the last point to the first to close the loop
-		if len(vertices) > 2 {
-			x1, y1 := vertices[len(vertices)-1].DstX, vertices[len(vertices)-1].DstY
-			x2, y2 := vertices[0].DstX, vertices[0].DstY
-			vector.StrokeLine(screen, x1, y1, x2, y2, 2, color.RGBA{R: 120, G: 200, B: 255, A: 255}, false)
 		}
 	} else if v.waveForm == "ferroliquid" {
 
 		// Draw Ferroliquid waveform visualizer
-		vertices := waveforms.FerroliquidWaveform(v.samples, v.screenWidth, v.screenHeight, v.waveOffset)
+		vertices := waveforms.FerroliquidWaveform(v.samples, v.screenWidth, v.screenHeight, v.waveOffset, v.volume*100, 0.5, 0.005)
 		if len(vertices) > 1 {
 			for i := 0; i < len(vertices)-1; i++ {
 				x1, y1 := vertices[i].DstX, vertices[i].DstY
@@ -208,7 +240,7 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 			vector.StrokeLine(screen, x1, y1, x2, y2, 2, clr, false)
 		}
 	} else if v.waveForm == "bezier" {
-		vertices := waveforms.BezierWaveform(v.samples, v.screenWidth, v.screenHeight, v.waveOffset)
+		vertices := waveforms.BezierWaveform(v.samples, v.screenWidth, v.screenHeight, v.waveOffset, v.volume*100)
 		if len(vertices) > 1 {
 			for i := 0; i < len(vertices)-2; i += 3 {
 				x1, y1 := vertices[i].DstX, vertices[i].DstY
@@ -219,14 +251,7 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 			}
 		}
 	} else {
-		vertices := waveforms.SmoothWaveform(v.samples, v.screenWidth, v.screenHeight, v.waveOffset)
-		if len(vertices) > 1 {
-			for i := 0; i < len(vertices)-1; i++ {
-				x1, y1 := vertices[i].DstX, vertices[i].DstY
-				x2, y2 := vertices[i+1].DstX, vertices[i+1].DstY
-				vector.StrokeLine(screen, x1, y1, x2, y2, 3, clr, false)
-			}
-		}
+		fmt.Println("No Waveform")
 	}
 
 	// Draw radiating points visualizer
@@ -270,26 +295,6 @@ func (v *audioVisualizer) Layout(outsideWidth, outsideHeight int) (int, int) {
 	v.screenWidth = outsideWidth
 	v.screenHeight = outsideHeight
 	return outsideWidth, outsideHeight
-}
-
-func RunVisualizer(ctx *malgo.AllocatedContext, audioInput []float64) {
-	initialWidth, initialHeight := 800, 400
-	visualizer := newAudioVisualizer(chunkSize, initialWidth, initialHeight)
-
-	// Run the Ebiten game loop
-	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
-	ebiten.SetWindowSize(initialWidth, initialHeight)
-	ebiten.SetWindowTitle("Visualizer")
-
-	go func() {
-		for {
-			copy(visualizer.currentChunk, audioInput)
-		}
-	}()
-
-	if err := ebiten.RunGame(visualizer); err != nil {
-		log.Fatalf("Failed to run visualizer: %v", err)
-	}
 }
 
 func RunMezmer() error {

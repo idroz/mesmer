@@ -2,6 +2,7 @@ package waveforms
 
 import (
 	"math"
+	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -32,11 +33,12 @@ func SmoothWaveform(samples []float64, screenWidth, screenHeight int, offset flo
 	return vertices
 }
 
-func FerroliquidWaveform(samples []float64, screenWidth, screenHeight int, offset float64) []ebiten.Vertex {
+func FerroliquidWaveform(samples []float64, screenWidth, screenHeight int, offset float64, radiusControl float64, smoothingFactor float64, amplitudeFactor float64) []ebiten.Vertex {
+	var previousVertices []ebiten.Vertex
 	vertices := make([]ebiten.Vertex, 0, len(samples)*2)
 	centerX := float64(screenWidth) / 2
 	centerY := float64(screenHeight) / 2
-	maxRadius := math.Min(float64(screenWidth), float64(screenHeight)) / 3
+	maxRadius := radiusControl * rand.Float64()
 
 	// Smoothing for radii
 	smoothedRadius := make([]float64, len(samples))
@@ -48,51 +50,44 @@ func FerroliquidWaveform(samples []float64, screenWidth, screenHeight int, offse
 		}
 	}
 
+	// Generate current vertices
+	currentVertices := make([]ebiten.Vertex, len(samples))
 	for i := 0; i < len(samples); i++ {
 		angle := (float64(i) + offset) / float64(len(samples)) * 2 * math.Pi
 		radius := smoothedRadius[i] * (1 + amplitudeFactor*math.Sin(offset+float64(i)/10))
 		x := centerX + radius*math.Cos(angle)
 		y := centerY + radius*math.Sin(angle)
-		vertices = append(vertices, ebiten.Vertex{
+		currentVertices[i] = ebiten.Vertex{
 			DstX: float32(x), DstY: float32(y),
 			ColorR: 1, ColorG: 1, ColorB: 1, ColorA: 1,
-		})
+		}
 	}
 
+	// Interpolate between previous and current vertices
+	interpolationFactor := 0.1 // Adjust this factor for smoother transitions
+	if len(previousVertices) == len(currentVertices) {
+		for i := 0; i < len(samples); i++ {
+			x := float32((1-interpolationFactor)*float64(previousVertices[i].DstX) + interpolationFactor*float64(currentVertices[i].DstX))
+			y := float32((1-interpolationFactor)*float64(previousVertices[i].DstY) + interpolationFactor*float64(currentVertices[i].DstY))
+			vertices = append(vertices, ebiten.Vertex{
+				DstX: x, DstY: y,
+				ColorR: 1, ColorG: 1, ColorB: 1, ColorA: 1,
+			})
+		}
+	} else {
+		vertices = currentVertices
+	}
+
+	// Store current vertices as the previous for the next frame
+	previousVertices = currentVertices
 	return vertices
 }
 
-func FoldingWaveform(samples []float64, screenWidth, screenHeight int, offset float64, attribute float64) []ebiten.Vertex {
-	vertices := make([]ebiten.Vertex, 0, len(samples)*2)
-	centerX := float64(screenWidth)/2 + math.Sin(offset*centerMoveSpeed)*100  // Dynamic horizontal movement
-	centerY := float64(screenHeight)/2 + math.Cos(offset*centerMoveSpeed)*100 // Dynamic vertical movement
-	maxRadius := attribute                                                    //math.Min(float64(screenWidth), float64(screenHeight)) / 3
-
-	for i := 0; i < len(samples); i++ {
-		angle := (float64(i) + offset) / float64(len(samples)) * 4 * math.Pi                             // Wrap around for folding
-		radius := maxRadius * (1 + samples[i]*amplitudeFactor) * (1 + 0.2*math.Sin(offset+float64(i)/5)) // More pronounced folds
-
-		// Add folding effect by modulating the radius
-		foldEffect := 0.5 + 0.7*math.Sin(float64(i)/10+offset)
-		radius *= foldEffect
-
-		x := centerX + radius*math.Cos(angle)
-		y := centerY + radius*math.Sin(angle)
-		vertices = append(vertices, ebiten.Vertex{
-			DstX: float32(x), DstY: float32(y),
-			ColorR: float32(0.5 + 0.5*math.Sin(float64(i)/20+offset)), // Color modulation
-			ColorG: float32(0.8), ColorB: float32(1), ColorA: 1,
-		})
-	}
-
-	return vertices
-}
-
-func BezierWaveform(samples []float64, screenWidth, screenHeight int, offset float64) []ebiten.Vertex {
+func BezierWaveform(samples []float64, screenWidth, screenHeight int, offset float64, radiusControl float64) []ebiten.Vertex {
 	vertices := make([]ebiten.Vertex, 0, len(samples)*2)
 	centerX := float64(screenWidth) / 2
 	centerY := float64(screenHeight) / 2
-	radius := math.Min(float64(screenWidth), float64(screenHeight)) / 3
+	radius := radiusControl * rand.Float64()
 
 	for i := 0; i < len(samples)-2; i += 3 {
 		angle1 := (float64(i) + offset) / float64(len(samples)) * 2 * math.Pi

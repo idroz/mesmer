@@ -1,6 +1,23 @@
 package utils
 
-import "math"
+import (
+	"math"
+
+	"github.com/mjibson/go-dsp/fft"
+)
+
+func ComputeFFT(waveform []float64) []float64 {
+	complexData := make([]complex128, len(waveform))
+	for i, sample := range waveform {
+		complexData[i] = complex(sample, 0)
+	}
+	fftResult := fft.FFT(complexData)
+	frequencies := make([]float64, len(fftResult)/2)
+	for i := range frequencies {
+		frequencies[i] = math.Abs(real(fftResult[i]))
+	}
+	return frequencies
+}
 
 func CalculateDominantFrequency(samples []float64, sampleRate int) float64 {
 	n := len(samples)
