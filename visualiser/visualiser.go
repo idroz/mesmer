@@ -1,11 +1,13 @@
 package visualiser
 
 import (
+	"encoding/binary"
 	"fmt"
 	"image/color"
 	"log"
 	"math"
 	"math/rand"
+	"os"
 	"runtime"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/idroz/mezmer/utils"
+	"github.com/idroz/mezmer/video"
 	"github.com/idroz/mezmer/waveforms"
 	"golang.org/x/image/font/basicfont"
 )
@@ -51,9 +54,13 @@ type audioVisualizer struct {
 	volume          float64
 	frequency       float64
 	tabPressed      bool
+	spacePressed    bool
+	isRecording     bool
 	waveForm        string
 	waveOffset      float64
 	connectedDevice string
+	micDevice       *malgo.Device
+	video           *video.Recording
 }
 
 func newAudioVisualizer(chunkSize, screenWidth, screenHeight int) *audioVisualizer {
@@ -69,10 +76,18 @@ func newAudioVisualizer(chunkSize, screenWidth, screenHeight int) *audioVisualiz
 		volume:          0,
 		frequency:       0,
 		tabPressed:      false,
+		spacePressed:    false,
+		isRecording:     false,
 		waveForm:        "smooth",
 		waveOffset:      0,
 		connectedDevice: "",
+		video:           nil,
 	}
+}
+
+func (v *audioVisualizer) Record() error {
+
+	return nil
 }
 
 // Update reads new audio data into the visualizer and updates the points.
@@ -85,6 +100,26 @@ func (v *audioVisualizer) Update() error {
 		}
 	} else {
 		v.tabPressed = false
+	}
+
+	// Handle toggling recording on space key press
+	if ebiten.IsKeyPressed(ebiten.KeySpace) {
+		if !v.spacePressed {
+			v.spacePressed = true
+			v.isRecording = !v.isRecording
+
+			if v.isRecording == false {
+				v.video.CreateVideoFromFrames()
+				v.video.Close()
+			}
+		}
+	} else {
+		v.spacePressed = false
+		if v.isRecording == false {
+			ebiten.SetWindowTitle("Mezmer")
+		} else {
+			ebiten.SetWindowTitle("Mezmer (Recording)")
+		}
 	}
 
 	// Increment wave offset to control gradual oscillation
@@ -262,6 +297,12 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 			B: 128,
 			A: 10})
 	}
+
+	if v.isRecording {
+		_ = v.video.SaveFrame(screen)
+		v.video.Update()
+	}
+
 }
 
 func (v *audioVisualizer) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -309,6 +350,24 @@ func RunMezmer() error {
 	// Initialize the visualizer
 	initialWidth, initialHeight := 800, 400
 	visualizer := newAudioVisualizer(chunkSize, initialWidth, initialHeight)
+	recording, err := video.NewRecording(visualizer.screenWidth, visualizer.screenHeight, 60)
+
+	var wavFile *os.File
+	var wavHeader struct {
+		ChunkID       [4]byte
+		ChunkSize     uint32
+		Format        [4]byte
+		Subchunk1ID   [4]byte
+		Subchunk1Size uint32
+		AudioFormat   uint16
+		NumChannels   uint16
+		SampleRate    uint32
+		ByteRate      uint32
+		BlockAlign    uint16
+		BitsPerSample uint16
+		Subchunk2ID   [4]byte
+		Subchunk2Size uint32
+	}
 
 	// Goroutine to check for the OP-XY device
 	go func() {
@@ -345,11 +404,24 @@ func RunMezmer() error {
 				deviceConfig.SampleRate = 44100
 				deviceConfig.Capture.DeviceID = targetDevice.ID.Pointer()
 
+				if visualizer.isRecording {
+					wavFile, err = os.Create(visualizer.video.OutputAudio)
+					if err != nil {
+						log.Println(err.Error())
+					}
+					defer wavFile.Close()
+
+					wavHeader = createWAVHeader(0, deviceConfig)
+					binary.Write(wavFile, binary.LittleEndian, &wavHeader)
+				}
+
+				dataBuffer := make([]byte, 0)
 				deviceCallbacks := malgo.DeviceCallbacks{
 					Data: func(_, inputSamples []byte, frameCount uint32) {
 						for i := 0; i < int(frameCount) && i < len(audioInput); i++ {
 							sample := int16(inputSamples[2*i]) | int16(inputSamples[2*i+1])<<8
 							audioInput[i] = float64(sample) / 32768.0 // Convert to float64
+							dataBuffer = append(dataBuffer, inputSamples...)
 						}
 					},
 				}
@@ -360,26 +432,95 @@ func RunMezmer() error {
 				}
 				defer device.Uninit()
 
+				visualizer.micDevice = device
+
 				if err := device.Start(); err != nil {
 					log.Fatalf("Failed to start device: %v", err)
+				}
+
+				if visualizer.isRecording {
+					// Write the captured audio to the WAV file
+					_, err = wavFile.Write(dataBuffer)
+					if err != nil {
+						fmt.Println("Error writing audio data to WAV file:", err)
+						return
+					}
+
+					// Update the WAV header with the actual data size
+					wavHeader.Subchunk2Size = uint32(len(dataBuffer))
+					wavHeader.ChunkSize = 36 + wavHeader.Subchunk2Size
+					wavFile.Seek(0, 0) // Rewind to the start of the file
+					binary.Write(wavFile, binary.LittleEndian, &wavHeader)
 				}
 
 				// Copy audio data to visualizer
 				for {
 					copy(visualizer.currentChunk, audioInput)
 				}
+
 			} else {
 				time.Sleep(100 * time.Millisecond) // Wait for device to be available
 			}
 		}
 	}()
 
+	visualizer.video = recording
+
 	// Run the Ebiten visualizer
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetWindowSize(initialWidth, initialHeight)
 	ebiten.SetWindowTitle("Mezmer")
 	if err := ebiten.RunGame(visualizer); err != nil {
-		log.Fatalf("Failed to run visualizer: %v", err)
+		return err
 	}
 	return nil
+}
+
+func createWAVHeader(dataSize int, config malgo.DeviceConfig) struct {
+	ChunkID       [4]byte
+	ChunkSize     uint32
+	Format        [4]byte
+	Subchunk1ID   [4]byte
+	Subchunk1Size uint32
+	AudioFormat   uint16
+	NumChannels   uint16
+	SampleRate    uint32
+	ByteRate      uint32
+	BlockAlign    uint16
+	BitsPerSample uint16
+	Subchunk2ID   [4]byte
+	Subchunk2Size uint32
+} {
+
+	var bitsPerSample = uint16(16)
+
+	return struct {
+		ChunkID       [4]byte
+		ChunkSize     uint32
+		Format        [4]byte
+		Subchunk1ID   [4]byte
+		Subchunk1Size uint32
+		AudioFormat   uint16
+		NumChannels   uint16
+		SampleRate    uint32
+		ByteRate      uint32
+		BlockAlign    uint16
+		BitsPerSample uint16
+		Subchunk2ID   [4]byte
+		Subchunk2Size uint32
+	}{
+		ChunkID:       [4]byte{'R', 'I', 'F', 'F'},
+		ChunkSize:     36 + uint32(dataSize),
+		Format:        [4]byte{'W', 'A', 'V', 'E'},
+		Subchunk1ID:   [4]byte{'f', 'm', 't', ' '},
+		Subchunk1Size: 16,
+		AudioFormat:   1, // PCM
+		NumChannels:   uint16(config.Capture.Channels),
+		SampleRate:    config.SampleRate,
+		ByteRate:      config.SampleRate * uint32(config.Capture.Channels) * uint32(bitsPerSample/8),
+		BlockAlign:    uint16(config.Capture.Channels) * bitsPerSample / 8,
+		BitsPerSample: bitsPerSample,
+		Subchunk2ID:   [4]byte{'d', 'a', 't', 'a'},
+		Subchunk2Size: uint32(dataSize),
+	}
 }
