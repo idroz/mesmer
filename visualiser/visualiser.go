@@ -316,8 +316,10 @@ func RunMezmer() error {
 	)
 
 	// Initialize the visualizer
-	initialWidth, initialHeight := 800, 400
+	initialWidth, initialHeight := 1280, 720
 	visualizer := newAudioVisualizer(chunkSize, initialWidth, initialHeight)
+
+	errChan := make(chan error)
 
 	// Goroutine to check for the OP-XY/OP-Z device
 	go func(ctx context.Context) {
@@ -354,12 +356,15 @@ func RunMezmer() error {
 	}(ctx)
 
 	go func(ctx context.Context) {
+		defer close(errChan)
+
 		for {
 			select {
 			case <-ctx.Done():
 				fmt.Println("Audio capture goroutine shutting down...")
 				return
 			default:
+
 				deviceMutex.Lock()
 				if deviceAvailable && targetDevice != nil {
 					// Configure audio capture
@@ -380,14 +385,13 @@ func RunMezmer() error {
 
 					device, err := malgo.InitDevice(ctxAudio.Context, deviceConfig, deviceCallbacks)
 					if err != nil {
-						log.Printf("Failed to initialize device: %v", err)
-						deviceMutex.Unlock()
+						errChan <- fmt.Errorf("Failed to initialize device: %v", err)
 						return
 					}
 					defer device.Uninit()
 
 					if err := device.Start(); err != nil {
-						log.Printf("Failed to start device: %v", err)
+						errChan <- fmt.Errorf("Failed to start device: %v", err)
 						deviceMutex.Unlock()
 						return
 					}
