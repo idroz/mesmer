@@ -5,3 +5,4 @@ OP-XY/Z sound visualiser
 
 brew install glfw
 brew install pkg-config
+brew install mingw-w64
