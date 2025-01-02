@@ -176,7 +176,6 @@ func (v *audioVisualizer) Update() error {
 				fadeIn:    true,
 			})
 		}
-
 	}
 
 	// Update existing points (radiate, fade in, fade out, and remove if off screen or alpha <= 0)
@@ -202,6 +201,11 @@ func (v *audioVisualizer) Update() error {
 	}
 
 	return nil
+}
+
+// Helper function to calculate distance between two points
+func distance(p1, p2 point) float64 {
+	return math.Sqrt(math.Pow(p2.x-p1.x, 2) + math.Pow(p2.y-p1.y, 2))
 }
 
 // Draw renders both visualizations: waveform and radiating points.
@@ -273,21 +277,12 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 	// Draw text overlay
 	if v.showText {
 		textFace := basicfont.Face7x13
-		text.Draw(screen, fmt.Sprintf("Connected Device: %s", v.connectedDevice), textFace, 10, 20, color.RGBA{
-			R: 128,
-			G: 128,
-			B: 128,
-			A: 10})
-		text.Draw(screen, fmt.Sprintf("Volume: %.2f", float64(v.maxPoints)), textFace, 10, 40, color.RGBA{
-			R: 128,
-			G: 128,
-			B: 128,
-			A: 10})
-		text.Draw(screen, fmt.Sprintf("Frequency: %.2f", float64(v.frequency)), textFace, 10, 60, color.RGBA{
-			R: 128,
-			G: 128,
-			B: 128,
-			A: 10})
+		text.Draw(screen, fmt.Sprintf("Connected Device: %s", v.connectedDevice), textFace, 10, 20, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+		text.Draw(screen, fmt.Sprintf("Volume: %.2f", float64(v.maxPoints)), textFace, 10, 40, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+		text.Draw(screen, fmt.Sprintf("Frequency: %.2f", float64(v.frequency)), textFace, 10, 60, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+
+		text.Draw(screen, fmt.Sprint("Waveforms: 0 (None),   1 (Smooth)"), textFace, 10, v.screenHeight-30, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+		text.Draw(screen, fmt.Sprint("Patterns:  5 (Radial), 6 (Spiral)"), textFace, 10, v.screenHeight-10, color.RGBA{R: 128, G: 128, B: 128, A: 10})
 	}
 }
 
