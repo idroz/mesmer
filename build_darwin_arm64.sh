@@ -33,4 +33,5 @@ mv Mezmer.app dist/
 /usr/bin/ditto -c -k --keepParent "dist/Mezmer.app" "dist/$ZIP_PATH"
 
 rm -r app bin
+rm Mezmer.zip
 sudo rm -r dist/Mezmer.app

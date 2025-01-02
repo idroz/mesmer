@@ -1,12 +1,14 @@
 package visualiser
 
 import (
+	"context"
 	"fmt"
 	"image/color"
 	"log"
 	"math"
 	"math/rand"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/gen2brain/malgo"
@@ -293,93 +295,128 @@ func RunVisualizer(ctx *malgo.AllocatedContext, audioInput []float64) {
 func RunMezmer() error {
 	runtime.LockOSThread()
 
-	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
+	// Create a context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctxAudio, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
 		fmt.Printf("Log: %s\n", message)
 	})
 	if err != nil {
-		log.Fatalf("Failed to initialize context: %v", err)
+		return err
 	}
-	defer ctx.Uninit()
-	defer ctx.Free()
+	defer ctxAudio.Uninit()
+	defer ctxAudio.Free()
 
 	audioInput := make([]float64, chunkSize)
-	var deviceAvailable bool
-	var targetDevice *malgo.DeviceInfo
+	var (
+		deviceMutex     sync.Mutex
+		deviceAvailable bool
+		targetDevice    *malgo.DeviceInfo
+	)
 
 	// Initialize the visualizer
 	initialWidth, initialHeight := 800, 400
 	visualizer := newAudioVisualizer(chunkSize, initialWidth, initialHeight)
 
 	// Goroutine to check for the OP-XY/OP-Z device
-	go func() {
+	go func(ctx context.Context) {
 		for {
-			devices, err := ctx.Devices(malgo.Capture)
-			if err != nil {
-				log.Printf("Error listing devices: %v", err)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			for _, device := range devices {
-				if device.Name() == "OP-XY" || device.Name() == "OP-Z" {
-					targetDevice = &device
-					deviceAvailable = true
-					fmt.Printf("Found device: %s\n", device.Name())
-					visualizer.connectedDevice = device.Name()
-					return
-				}
-			}
-
-			fmt.Println("Waiting for OP-XY/Z device...")
-			time.Sleep(1 * time.Second)
-		}
-	}()
-
-	go func() {
-		for {
-			if deviceAvailable && targetDevice != nil {
-				// Configure audio capture
-				deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
-				deviceConfig.Capture.Format = malgo.FormatS16
-				deviceConfig.Capture.Channels = 1
-				deviceConfig.SampleRate = 44100
-				deviceConfig.Capture.DeviceID = targetDevice.ID.Pointer()
-
-				deviceCallbacks := malgo.DeviceCallbacks{
-					Data: func(_, inputSamples []byte, frameCount uint32) {
-						for i := 0; i < int(frameCount) && i < len(audioInput); i++ {
-							sample := int16(inputSamples[2*i]) | int16(inputSamples[2*i+1])<<8
-							audioInput[i] = float64(sample) / 32768.0 // Convert to float64
-						}
-					},
-				}
-
-				device, err := malgo.InitDevice(ctx.Context, deviceConfig, deviceCallbacks)
+			select {
+			case <-ctx.Done():
+				fmt.Println("Device discovery goroutine shutting down...")
+				return
+			default:
+				devices, err := ctxAudio.Devices(malgo.Capture)
 				if err != nil {
-					log.Fatalf("Failed to initialize device: %v", err)
-				}
-				defer device.Uninit()
-
-				if err := device.Start(); err != nil {
-					log.Fatalf("Failed to start device: %v", err)
+					log.Printf("Error listing devices: %v", err)
+					time.Sleep(1 * time.Second)
+					continue
 				}
 
-				// Copy audio data to visualizer
-				for {
-					copy(visualizer.currentChunk, audioInput)
+				deviceMutex.Lock()
+				for _, device := range devices {
+					if device.Name() == "OP-XY" || device.Name() == "OP-Z" {
+						targetDevice = &device
+						deviceAvailable = true
+						fmt.Printf("Found device: %s\n", device.Name())
+						visualizer.connectedDevice = device.Name()
+						deviceMutex.Unlock()
+						return
+					}
 				}
-			} else {
+				deviceMutex.Unlock()
+
+				fmt.Println("Waiting for the OP-XY/Z device...")
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}(ctx)
+
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Println("Audio capture goroutine shutting down...")
+				return
+			default:
+				deviceMutex.Lock()
+				if deviceAvailable && targetDevice != nil {
+					// Configure audio capture
+					deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
+					deviceConfig.Capture.Format = malgo.FormatS16
+					deviceConfig.Capture.Channels = 1
+					deviceConfig.SampleRate = 44100
+					deviceConfig.Capture.DeviceID = targetDevice.ID.Pointer()
+
+					deviceCallbacks := malgo.DeviceCallbacks{
+						Data: func(_, inputSamples []byte, frameCount uint32) {
+							for i := 0; i < int(frameCount) && i < len(audioInput); i++ {
+								sample := int16(inputSamples[2*i]) | int16(inputSamples[2*i+1])<<8
+								audioInput[i] = float64(sample) / 32768.0 // Convert to float64
+							}
+						},
+					}
+
+					device, err := malgo.InitDevice(ctxAudio.Context, deviceConfig, deviceCallbacks)
+					if err != nil {
+						log.Printf("Failed to initialize device: %v", err)
+						deviceMutex.Unlock()
+						return
+					}
+					defer device.Uninit()
+
+					if err := device.Start(); err != nil {
+						log.Printf("Failed to start device: %v", err)
+						deviceMutex.Unlock()
+						return
+					}
+
+					for {
+						select {
+						case <-ctx.Done():
+							fmt.Println("Stopping audio capture...")
+							device.Stop()
+							return
+						default:
+							copy(visualizer.currentChunk, audioInput)
+						}
+					}
+				}
+				deviceMutex.Unlock()
 				time.Sleep(100 * time.Millisecond) // Wait for device to be available
 			}
 		}
-	}()
+	}(ctx)
 
 	// Run the Ebiten visualizer
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetWindowSize(initialWidth, initialHeight)
 	ebiten.SetWindowTitle("Mezmer")
 	if err := ebiten.RunGame(visualizer); err != nil {
-		log.Fatalf("Failed to run visualizer: %v", err)
+		cancel() // Cancel context to stop goroutines
+		return err
 	}
+
 	return nil
 }
