@@ -1,0 +1,2 @@
+bash build_darwin_arm64.sh
+bash build_windows_x64_x32.sh
