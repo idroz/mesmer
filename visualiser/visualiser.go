@@ -73,7 +73,7 @@ func newAudioVisualizer(chunkSize, screenWidth, screenHeight int) *audioVisualiz
 		spacePressed:    false,
 		waveForm:        "smooth",
 		waveOffset:      0,
-		connectedDevice: "",
+		connectedDevice: "No Device",
 	}
 }
 
@@ -313,6 +313,7 @@ func RunMezmer() error {
 		deviceMutex     sync.Mutex
 		deviceAvailable bool
 		targetDevice    *malgo.DeviceInfo
+		activeDevice    *malgo.Device // Track the active audio device
 	)
 
 	// Initialize the visualizer
@@ -337,24 +338,46 @@ func RunMezmer() error {
 				}
 
 				deviceMutex.Lock()
+				foundDevice := false
 				for _, device := range devices {
 					if device.Name() == "OP-XY" || device.Name() == "OP-Z" {
-						targetDevice = &device
-						deviceAvailable = true
-						fmt.Printf("Found device: %s\n", device.Name())
-						visualizer.connectedDevice = device.Name()
-						deviceMutex.Unlock()
-						return
+						if targetDevice == nil || targetDevice.ID.Pointer() != device.ID.Pointer() {
+							targetDevice = &device
+							deviceAvailable = true
+							fmt.Printf("Found device: %s\n", device.Name())
+							visualizer.connectedDevice = device.Name()
+						}
+						foundDevice = true
+						break
+					}
+				}
+
+				if !foundDevice {
+					if deviceAvailable {
+						fmt.Println("Device disconnected.")
+						deviceAvailable = false
+						targetDevice = nil
+						visualizer.connectedDevice = "No Device"
+
+						if activeDevice != nil {
+							fmt.Println("Stopping active audio device...")
+							activeDevice.Stop()
+							activeDevice.Uninit()
+							activeDevice = nil
+						}
 					}
 				}
 				deviceMutex.Unlock()
 
-				fmt.Println("Waiting for the OP-XY/Z device...")
+				if !deviceAvailable {
+					fmt.Println("Waiting for the OP-XY/Z device...")
+				}
 				time.Sleep(1 * time.Second)
 			}
 		}
 	}(ctx)
 
+	// Goroutine to handle audio capture
 	go func(ctx context.Context) {
 		defer close(errChan)
 
@@ -362,12 +385,14 @@ func RunMezmer() error {
 			select {
 			case <-ctx.Done():
 				fmt.Println("Audio capture goroutine shutting down...")
+				if activeDevice != nil {
+					activeDevice.Stop()
+					activeDevice.Uninit()
+				}
 				return
 			default:
-
 				deviceMutex.Lock()
-				if deviceAvailable && targetDevice != nil {
-					// Configure audio capture
+				if deviceAvailable && targetDevice != nil && activeDevice == nil {
 					deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 					deviceConfig.Capture.Format = malgo.FormatS16
 					deviceConfig.Capture.Channels = 1
@@ -385,29 +410,33 @@ func RunMezmer() error {
 
 					device, err := malgo.InitDevice(ctxAudio.Context, deviceConfig, deviceCallbacks)
 					if err != nil {
-						errChan <- fmt.Errorf("Failed to initialize device: %v", err)
-						return
+						log.Printf("Failed to initialize device: %v", err)
+						deviceMutex.Unlock()
+						continue
 					}
-					defer device.Uninit()
 
 					if err := device.Start(); err != nil {
-						errChan <- fmt.Errorf("Failed to start device: %v", err)
+						log.Printf("Failed to start device: %v", err)
+						device.Uninit()
 						deviceMutex.Unlock()
-						return
+						continue
 					}
 
-					for {
-						select {
-						case <-ctx.Done():
-							fmt.Println("Stopping audio capture...")
-							device.Stop()
-							return
-						default:
-							copy(visualizer.currentChunk, audioInput)
-						}
-					}
+					fmt.Println("Audio device started.")
+					activeDevice = device
+				}
+
+				if !deviceAvailable && activeDevice != nil {
+					fmt.Println("Stopping active audio device due to disconnection...")
+					activeDevice.Stop()
+					activeDevice.Uninit()
+					activeDevice = nil
 				}
 				deviceMutex.Unlock()
+
+				if activeDevice != nil {
+					copy(visualizer.currentChunk, audioInput)
+				}
 				time.Sleep(100 * time.Millisecond) // Wait for device to be available
 			}
 		}
