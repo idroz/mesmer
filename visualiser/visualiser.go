@@ -310,7 +310,7 @@ func RunMezmer() error {
 	initialWidth, initialHeight := 800, 400
 	visualizer := newAudioVisualizer(chunkSize, initialWidth, initialHeight)
 
-	// Goroutine to check for the OP-XY device
+	// Goroutine to check for the OP-XY/OP-Z device
 	go func() {
 		for {
 			devices, err := ctx.Devices(malgo.Capture)
@@ -321,7 +321,7 @@ func RunMezmer() error {
 			}
 
 			for _, device := range devices {
-				if device.Name() == "OP-XY" {
+				if device.Name() == "OP-XY" || device.Name() == "OP-Z" {
 					targetDevice = &device
 					deviceAvailable = true
 					fmt.Printf("Found device: %s\n", device.Name())
@@ -330,7 +330,7 @@ func RunMezmer() error {
 				}
 			}
 
-			fmt.Println("Waiting for OP-XY device...")
+			fmt.Println("Waiting for OP-XY/Z device...")
 			time.Sleep(1 * time.Second)
 		}
 	}()
