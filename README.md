@@ -1,6 +1,11 @@
 # mezmer
 OP-XY/Z sound visualiser
 
+## Quick run
+```bash
+rm main; go build -o main; ./main
+```
+
 ## Building from Source
 The build system was tested only on a mac.
 
