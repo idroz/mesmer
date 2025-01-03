@@ -1,0 +1,7 @@
+*.dmg
+main
+bin/
+app/
+dist/
+*.zip
+.DS_Store 
