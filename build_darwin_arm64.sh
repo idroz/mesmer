@@ -15,6 +15,8 @@ cp ./resources/Info.plist ./app/Mezmer.app/Contents
 
 APP_PATH="app/Mezmer.app"
 APP_CERTIFICATE="Developer ID Application: Ignat Drozdov (27B2YLEUVR)"
+PKG_CERTIFICATE="Developer ID Installer: Ignat Drozdov (27B2YLEUVR)"
+
 codesign --timestamp --options=runtime -s "$APP_CERTIFICATE" -v --entitlements ./resources/entitlements.plist "$APP_PATH"
 
 ZIP_PATH="Mezmer_Darwin_arm64.zip"
@@ -32,6 +34,7 @@ mkdir dist
 mv Mezmer.app dist/
 /usr/bin/ditto -c -k --keepParent "dist/Mezmer.app" "dist/$ZIP_PATH"
 
+#productbuild --sign "$PKG_CERTIFICATE" --component dist/Mezmer.app /Applications dist/Mezmer.pkg
+
 rm -r app bin
-rm Mezmer.zip
 sudo rm -r dist/Mezmer.app
