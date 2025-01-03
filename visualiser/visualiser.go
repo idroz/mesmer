@@ -38,6 +38,15 @@ type point struct {
 	alpha     float64
 	volume    float64
 	fadeIn    bool
+	red       int
+	green     int
+	blue      int
+}
+
+type colorSceme struct {
+	red   int
+	green int
+	blue  int
 }
 
 // AudioVisualizer represents the visualization logic.
@@ -57,6 +66,7 @@ type audioVisualizer struct {
 	pointType       string
 	waveOffset      float64
 	connectedDevice string
+	colorScheme     colorSceme
 }
 
 func newAudioVisualizer(chunkSize, screenWidth, screenHeight int) *audioVisualizer {
@@ -76,6 +86,7 @@ func newAudioVisualizer(chunkSize, screenWidth, screenHeight int) *audioVisualiz
 		pointType:       "radial",
 		waveOffset:      0,
 		connectedDevice: "No Device",
+		colorScheme:     colorSceme{red: 255, green: 0, blue: 255},
 	}
 }
 
@@ -103,6 +114,27 @@ func (v *audioVisualizer) Update() error {
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyDigit6) {
 		v.pointType = "spiral"
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyShift) && ebiten.IsKeyPressed(ebiten.KeyR) {
+		v.colorScheme.red = int(math.Min(255, float64(v.colorScheme.red+1)))
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyR) && (!ebiten.IsKeyPressed(ebiten.KeyShift)) {
+		v.colorScheme.red = int(math.Max(0, float64(v.colorScheme.red-1)))
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyShift) && ebiten.IsKeyPressed(ebiten.KeyG) {
+		v.colorScheme.green = int(math.Min(255, float64(v.colorScheme.green+1)))
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyG) && (!ebiten.IsKeyPressed(ebiten.KeyShift)) {
+		v.colorScheme.green = int(math.Max(0, float64(v.colorScheme.green-1)))
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyShift) && ebiten.IsKeyPressed(ebiten.KeyB) {
+		v.colorScheme.blue = int(math.Min(255, float64(v.colorScheme.blue+1)))
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyB) && (!ebiten.IsKeyPressed(ebiten.KeyShift)) {
+		v.colorScheme.blue = int(math.Max(0, float64(v.colorScheme.blue-1)))
 	}
 
 	// Copy the latest audio data into the visualizer's current chunk.
@@ -203,11 +235,6 @@ func (v *audioVisualizer) Update() error {
 	return nil
 }
 
-// Helper function to calculate distance between two points
-func distance(p1, p2 point) float64 {
-	return math.Sqrt(math.Pow(p2.x-p1.x, 2) + math.Pow(p2.y-p1.y, 2))
-}
-
 // Draw renders both visualizations: waveform and radiating points.
 func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 	screen.Fill(color.Black) // Clear the screen
@@ -215,7 +242,9 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 	// Calculate dominant frequency
 	dominantFrequency := utils.CalculateDominantFrequency(v.samples, 44100)
 	v.frequency = dominantFrequency
-	clr := color.RGBA{R: uint8(math.Min(0, 255-255*dominantFrequency/10)), G: 2, B: uint8(math.Min(255, 255*dominantFrequency/10)), A: uint8(255 * v.volume)}
+	clr := color.RGBA{R: uint8(math.Min(0, float64(v.colorScheme.red)-255*dominantFrequency/10)),
+		G: uint8(v.colorScheme.green),
+		B: uint8(math.Min(float64(v.colorScheme.blue), float64(v.colorScheme.blue)*dominantFrequency/10)), A: uint8(255 * v.volume)}
 
 	if v.waveForm == "smooth" {
 		vertices := waveforms.SmoothWaveform(v.samples, v.screenWidth, v.screenHeight, v.waveOffset)
@@ -260,11 +289,10 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 
 	// Draw radiating points visualizer
 	for _, p := range v.volumePoints {
-
 		clr := color.RGBA{
-			R: uint8(255 * p.volume),
-			G: 0,
-			B: uint8(255 * (1 - p.volume)),
+			R: uint8(float64(v.colorScheme.red) * p.volume),
+			G: uint8(v.colorScheme.green),
+			B: uint8(float64(v.colorScheme.blue) * (1 - p.volume)),
 			A: uint8(255 * p.volume * p.alpha),
 		}
 		for dx := -pointSize / 2; dx <= pointSize/2; dx++ {
@@ -278,8 +306,12 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 	if v.showText {
 		textFace := basicfont.Face7x13
 		text.Draw(screen, fmt.Sprintf("Connected Device: %s", v.connectedDevice), textFace, 10, 20, color.RGBA{R: 128, G: 128, B: 128, A: 10})
-		text.Draw(screen, fmt.Sprintf("Volume: %.2f", float64(v.maxPoints)), textFace, 10, 40, color.RGBA{R: 128, G: 128, B: 128, A: 10})
-		text.Draw(screen, fmt.Sprintf("Frequency: %.2f", float64(v.frequency)), textFace, 10, 60, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+		text.Draw(screen, fmt.Sprintf("Volume: %.2f", float64(v.maxPoints)), textFace, 10, 50, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+		text.Draw(screen, fmt.Sprintf("Frequency: %.2f", float64(v.frequency)), textFace, 10, 70, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+
+		text.Draw(screen, fmt.Sprintf("R: %d", v.colorScheme.red), textFace, 10, 100, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+		text.Draw(screen, fmt.Sprintf("G: %d", v.colorScheme.green), textFace, 10, 120, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+		text.Draw(screen, fmt.Sprintf("B: %d", v.colorScheme.blue), textFace, 10, 140, color.RGBA{R: 128, G: 128, B: 128, A: 10})
 
 		text.Draw(screen, fmt.Sprint("Waveforms: 0 (None),   1 (Smooth)"), textFace, 10, v.screenHeight-30, color.RGBA{R: 128, G: 128, B: 128, A: 10})
 		text.Draw(screen, fmt.Sprint("Patterns:  5 (Radial), 6 (Spiral)"), textFace, 10, v.screenHeight-10, color.RGBA{R: 128, G: 128, B: 128, A: 10})
