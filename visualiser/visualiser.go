@@ -116,7 +116,7 @@ func (v *audioVisualizer) Update() error {
 		v.pointType = "spiral"
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyDigit7) {
-		v.pointType = "waves"
+		v.pointType = "slinky"
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyShift) && ebiten.IsKeyPressed(ebiten.KeyR) {
@@ -211,22 +211,20 @@ func (v *audioVisualizer) Update() error {
 				fadeIn:    true,
 			})
 		}
-	} else if v.pointType == "waves" {
+	} else if v.pointType == "slinky" {
 		// Add new points radiating in a spiral pattern based on the volume
 		for len(v.volumePoints) < v.maxPoints {
-			angle := rand.Float64() * 2 * math.Pi // Random initial angle
-			//spiralRadius := normalizedVolume * 20.0 // Spiral radius influenced by volume
-			angleIncrement := 0.1 // Controls the spacing of the spiral
+			angle := rand.Float64() * 2 * math.Pi   // Random initial angle
+			spiralRadius := normalizedVolume * 10.0 // Spiral radius influenced by volume
+			angleIncrement := 0.1                   // Controls the spacing of the spiral
 
-			// Generate spiral points
+			// Generate wave points
 			for i := 0; i < v.maxPoints; i++ {
 				angle += angleIncrement
 
-				// xOffset := float64(i) * 10.0 // Linear spacing in x
-				// yOffset := math.Sin(float64(i)*angleIncrement) * spiralRadius
-
-				xOffset := float64(i%10) * 20.0 // 10 points per row
-				yOffset := float64(i/10) * 20.0 // Increment row every 10 points
+				//xOffset := ((rand.Float64() * 2) - 1) * (float64(i) * 10.0) // Linear spacing in x
+				xOffset := float64(i) * angleIncrement
+				yOffset := math.Sin(float64(i)*angleIncrement) * spiralRadius
 
 				v.volumePoints = append(v.volumePoints, point{
 					x:         randX + xOffset,
@@ -345,7 +343,7 @@ func (v *audioVisualizer) Draw(screen *ebiten.Image) {
 		text.Draw(screen, fmt.Sprintf("B: %d", v.colorScheme.blue), textFace, 10, 140, color.RGBA{R: 128, G: 128, B: 128, A: 10})
 
 		text.Draw(screen, fmt.Sprint("Waveforms: 0 (None),   1 (Smooth)"), textFace, 10, v.screenHeight-30, color.RGBA{R: 128, G: 128, B: 128, A: 10})
-		text.Draw(screen, fmt.Sprint("Patterns:  5 (Radial), 6 (Spiral), 7 (Wavy)"), textFace, 10, v.screenHeight-10, color.RGBA{R: 128, G: 128, B: 128, A: 10})
+		text.Draw(screen, fmt.Sprint("Patterns:  5 (Radial), 6 (Spiral), 7 (Slinky)"), textFace, 10, v.screenHeight-10, color.RGBA{R: 128, G: 128, B: 128, A: 10})
 	}
 }
 
